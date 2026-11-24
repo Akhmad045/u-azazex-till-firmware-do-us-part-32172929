@@ -19,7 +19,12 @@ MAX_CHARS = 200
 
 
 def validate(text):
-    """Enforce the competition gate: 1-200 chars, not only whitespace."""
+    """Enforce the competition gate: 1-200 chars, not only whitespace.
+
+    Tightened beyond the gate: any control character (other than the
+    newline already refused as multi-line) is rejected too, so a stray
+    byte can never slip a broken glyph into the judged line.
+    """
     if not isinstance(text, str):
         raise ValueError("entry must be text")
     if len(text) == 0:
@@ -34,6 +39,11 @@ def validate(text):
         raise ValueError("entry has leading or trailing whitespace")
     if "\n" in text or "\r" in text:
         raise ValueError("entry must be a single line")
+    for ch in text:
+        if ord(ch) < 32 or ord(ch) == 127:
+            raise ValueError(
+                f"entry contains control character U+{ord(ch):04X}"
+            )
     return text
 
 
@@ -44,9 +54,13 @@ def self_test():
         (" ", "whitespace-only"),
         ("x" * 201, "201 chars"),
         ("a\nb", "multi-line"),
+        ("a\rb", "carriage return"),
         ("trailing ", "trailing whitespace"),
         (" leading", "leading whitespace"),
         ("  padded  ", "padded whitespace"),
+        ("a\x01b", "control character"),
+        ("a\tb", "tab character"),
+        ("a\x7fb", "DEL character"),
     ]
     for text, label in cases:
         try:
@@ -67,11 +81,19 @@ def self_test():
     return 0
 
 
+USAGE = "usage: main.py [--self-test] [--help]"
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
         return self_test()
+    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
+        print(USAGE)
+        print("writes the robot wedding vow to /output/entry.txt")
+        print("  --self-test  exercise the validator's rejection cases")
+        return 0
     if len(sys.argv) > 1:
-        print("usage: main.py [--self-test]", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 2
     out_path = os.environ.get("ENTRY_OUTPUT", "/output/entry.txt")
     text = validate(ENTRY)
